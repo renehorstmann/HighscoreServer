@@ -56,7 +56,7 @@ static void highscore_remove_entry(Highscore *self, int idx) {
 }
 
 static void highscore_add_new_entry(Highscore *self, HighscoreEntry_s add) {
-    self->entries = rhc_realloc(self->entries, self->entries_size);
+    self->entries = rhc_realloc(self->entries, self->entries_size+1);
 
     for(int i=0; i<self->entries_size; i++) {
         if(self->entries[i].score < add.score) {

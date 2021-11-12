@@ -206,8 +206,10 @@ bool highscore_send_entry(Highscore *self, HighscoreEntry_s send) {
     Highscore new_hs = highscore_decode(msg.str);
     string_kill(&msg);
 
-    rhc_free(self->entries);
-    self->entries = new_hs.entries;
-    self->entries_size = new_hs.entries_size;
+    if(new_hs.entries_size != 0) {
+        rhc_free(self->entries);
+        self->entries = new_hs.entries;
+        self->entries_size = new_hs.entries_size;
+    }
     return true;
 }
