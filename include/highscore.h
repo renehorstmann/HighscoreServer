@@ -15,6 +15,7 @@ typedef struct {
 typedef struct {
     char topic[HIGHSCORE_TOPIC_MAX_LENGTH];
     char address[HIGHSCORE_ADDRESS_MAX_LENGTH];
+    uint16_t port;
     HighscoreEntry *entries;
     int entries_size;
 } Highscore;
@@ -26,7 +27,7 @@ Highscore highscore_new_receive(const char *topic, const char *address, uint16_t
 void highscore_kill(Highscore *self);
 
 // blocks until the highscore is updated and the new version is received (if possible)
-// if an error occures, the highscore remains empty
-void highscore_send_entry(Highscore *self, HighscoreEntry send);
+// returns true if the transmission was successfully
+bool highscore_send_entry(Highscore *self, HighscoreEntry send);
 
 #endif //HIGHSCORESERVER_HIGHSCORE_H
