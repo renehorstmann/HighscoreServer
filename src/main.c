@@ -118,10 +118,6 @@ static void save_entry(const char *topic, const char *entry) {
     snprintf(file, 256, "topics/%s.txt", topic);
 
     String msg = file_read(file, true);
-    if(!string_valid(msg)) {
-        printf("failed to read topic file: %s\n", file);
-        return;
-    }
 
     Highscore highscore = highscore_decode(msg.str);
     string_kill(&msg);
