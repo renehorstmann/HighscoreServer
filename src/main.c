@@ -48,6 +48,16 @@ static void make_dirs(const char *topic) {
     snprintf(syscall, 256, "mkdir -p %s", file);
 }
 
+static int highscore_sort_compare (const void *a, const void *b) {
+    const HighscoreEntry_s *entry_a = a;
+    const HighscoreEntry_s *entry_b = b;
+    return entry_a->score - entry_b->score;
+}
+
+static void highscore_sort(Highscore *self) {
+    qsort(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare);
+}
+
 static void highscore_remove_entry(Highscore *self, int idx) {
     for(int i=idx; i<self->entries_size-1; i++) {
         self->entries[i] = self->entries[i+1];
@@ -123,6 +133,8 @@ static void save_entry(const char *topic, const char *entry) {
     if(highscore.entries_size > HIGHSCORE_MAX_ENTRIES) {
         highscore.entries_size = HIGHSCORE_MAX_ENTRIES;
     }
+
+    highscore_sort(&highscore);
 
     String save = highscore_encode(highscore);
     highscore_kill(&highscore);
