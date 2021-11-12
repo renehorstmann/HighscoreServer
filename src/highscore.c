@@ -13,8 +13,8 @@
 
 #define HIGHSCORE_ENTRY_MAX_LENGTH 32
 
-const uint8_t HIGHSCORE_READ = 0;
-const uint8_t HIGHSCORE_WRITE_READ = 1;
+static const uint8_t HIGHSCORE_READ = 0;
+static const uint8_t HIGHSCORE_WRITE_READ = 1;
 
 
 /**
@@ -37,18 +37,40 @@ const uint8_t HIGHSCORE_WRITE_READ = 1;
  */
 
 
-//
-// private
-//
-
-void entry_encode(HighscoreEntry self, char *out_entry_buffer) {
-    snprintf(out_entry_buffer, sizeof out_entry_buffer, "%i~%s\n", self.score, self.name);
-}
-
 
 //
 // protected
 //
+
+
+HighscoreEntry highscore_entry_decode(Str_s entry) {
+    Str_s splits[3];
+    int splits_cnt = str_split(splits, 3, entry, '~');
+    if(splits_cnt != 2) {
+        log_warn("highscore_entry_decode failed to parse entry, splits_cnt!=2: %i", splits_cnt);
+        return (HighscoreEntry) {0};
+    }
+
+    char *end;
+    int score = (int) strtol(splits[0].data, &end, 10);
+
+    if(end != splits[1].data-2 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
+        log_warn("highscore_entry_decode failed to parse entry, invalid score or name length");
+        return (HighscoreEntry) {0};
+    }
+
+    HighscoreEntry self = {0};
+    self.score = score;
+    str_as_c(self.name, splits[1]);
+    return self;
+}
+
+
+// out_entry_buffer should be HIGHSCORE_ENTRY_MAX_LENGTH big
+void highscore_entry_encode(HighscoreEntry self, char *out_entry_buffer) {
+    snprintf(out_entry_buffer, HIGHSCORE_ENTRY_MAX_LENGTH, "%i~%s\n", self.score, self.name);
+}
+
 
 Highscore highscore_decode(Str_s msg) {
     HE_Array array = he_array_new(8);
@@ -59,25 +81,12 @@ Highscore highscore_decode(Str_s msg) {
         line = str_strip(line, ' ');
         if(str_empty(line))
             continue;
-        Str_s splits[3];
-        int splits_cnt = str_split(splits, 3, line, '~');
-        if(splits_cnt != 2) {
-            log_warn("highscore_decode failed to parse entry, splits_cnt!=2: %i", splits_cnt);
+
+        HighscoreEntry push = highscore_entry_decode(line);
+        if(push.name[0] == '\0')
             continue;
-        }
 
-        char *end;
-        int score = (int) strtol(splits[0].data, &end, 10);
-
-        if(end != splits[1].data-2 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
-            log_warn("highscore_decode failed to parse entry, invalid score or name length");
-            continue;
-        }
-
-        HighscoreEntry entry = {0};
-        entry.score = score;
-        str_as_c(entry.name, splits[1]);
-        he_array_push(&array, entry);
+        he_array_push(&array, push);
     }
     return (Highscore) {
             .entries = array.array,
@@ -89,7 +98,7 @@ String highscore_encode(Highscore self) {
     String s = string_new(1024);
     for(int i=0; i<self.entries_size; i++) {
         char entry_buffer[HIGHSCORE_ENTRY_MAX_LENGTH];
-        entry_encode(self.entries[i], entry_buffer);
+        highscore_entry_encode(self.entries[i], entry_buffer);
         string_append(&s, strc(entry_buffer));
     }
     return s;
@@ -165,7 +174,7 @@ bool highscore_send_entry(Highscore *self, HighscoreEntry send) {
     stream_write_msg(stream, topic_buffer, sizeof topic_buffer);
 
     char entry_buffer[HIGHSCORE_ENTRY_MAX_LENGTH];
-    entry_encode(send, entry_buffer);
+    highscore_entry_encode(send, entry_buffer);
     stream_write_msg(stream, entry_buffer, sizeof entry_buffer);
 
     // recv from server
