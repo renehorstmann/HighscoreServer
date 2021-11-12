@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <limits.h>
 
 #include "rhc/rhc_impl.h"
 
@@ -6,6 +7,7 @@
 
 
 #define HIGHSCORE_ENTRY_MAX_LENGTH 32
+#define HIGHSCORE_MAX_ENTRIES 256
 
 static const uint8_t HIGHSCORE_READ = 0;
 static const uint8_t HIGHSCORE_WRITE_READ = 1;
@@ -38,12 +40,70 @@ Highscore highscore_decode(Str_s msg);
 String highscore_encode(Highscore self);
 
 
-static void highscore_add_entry(Highscore *self, HighscoreEntry add) {
+static void make_dirs(const char *topic) {
+    char file[256];
+    snprintf(file, 256, "topics/%s", topic);
 
+    char syscall[256];
+    snprintf(syscall, 256, "mkdir -p %s", file);
 }
 
+static void highscore_remove_entry(Highscore *self, int idx) {
+    for(int i=idx; i<self->entries_size-1; i++) {
+        self->entries[i] = self->entries[i+1];
+    }
+    self->entries_size--;
+}
+
+static void highscore_add_new_entry(Highscore *self, HighscoreEntry add) {
+    self->entries = rhc_realloc(self->entries, self->entries_size);
+
+    for(int i=0; i<self->entries_size; i++) {
+        if(self->entries[i].score < add.score) {
+
+            // move others down
+            for(int j=self->entries_size-1; j>=i; j--) {
+                self->entries[j+1] = self->entries[j];
+            }
+
+            self->entries[i] = add;
+            self->entries_size++;
+            return;
+        }
+    }
+
+    // add is the last
+    self->entries[self->entries_size++] = add;
+}
+
+static void highscore_add_entry(Highscore *self, HighscoreEntry add) {
+    if(add.name[0] == '\0')
+        return;
+
+    HighscoreEntry *search = NULL;
+    for(int i=0; i<self->entries_size; i++) {
+        if(strcmp(self->entries[i].name, add.name) == 0) {
+            if(search) {
+                highscore_remove_entry(self, i);
+                i--;
+                continue;
+            }
+            search = &self->entries[i];
+        }
+    }
+
+    if(search) {
+        if(search->score < add.score) {
+            search->score = add.score;
+        }
+    } else {
+        highscore_add_new_entry(self, add);
+    }
+}
 
 static void save_entry(const char *topic, const char *entry) {
+    make_dirs(topic);
+
     char file[256];
     snprintf(file, 256, "topics/%s.txt", topic);
 
@@ -59,6 +119,10 @@ static void save_entry(const char *topic, const char *entry) {
     HighscoreEntry add = highscore_entry_decode(strc(entry));
 
     highscore_add_entry(&highscore, add);
+
+    if(highscore.entries_size > HIGHSCORE_MAX_ENTRIES) {
+        highscore.entries_size = HIGHSCORE_MAX_ENTRIES;
+    }
 
     String save = highscore_encode(highscore);
     highscore_kill(&highscore);
