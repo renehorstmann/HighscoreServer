@@ -34,8 +34,8 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
 
 // protected functions:
 
-HighscoreEntry highscore_entry_decode(Str_s entry);
-void highscore_entry_encode(HighscoreEntry self, char *out_entry_buffer);
+HighscoreEntry_s highscore_entry_decode(Str_s entry);
+void highscore_entry_encode(HighscoreEntry_s self, char *out_entry_buffer);
 Highscore highscore_decode(Str_s msg);
 String highscore_encode(Highscore self);
 
@@ -55,7 +55,7 @@ static void highscore_remove_entry(Highscore *self, int idx) {
     self->entries_size--;
 }
 
-static void highscore_add_new_entry(Highscore *self, HighscoreEntry add) {
+static void highscore_add_new_entry(Highscore *self, HighscoreEntry_s add) {
     self->entries = rhc_realloc(self->entries, self->entries_size);
 
     for(int i=0; i<self->entries_size; i++) {
@@ -76,11 +76,11 @@ static void highscore_add_new_entry(Highscore *self, HighscoreEntry add) {
     self->entries[self->entries_size++] = add;
 }
 
-static void highscore_add_entry(Highscore *self, HighscoreEntry add) {
+static void highscore_add_entry(Highscore *self, HighscoreEntry_s add) {
     if(add.name[0] == '\0')
         return;
 
-    HighscoreEntry *search = NULL;
+    HighscoreEntry_s *search = NULL;
     for(int i=0; i<self->entries_size; i++) {
         if(strcmp(self->entries[i].name, add.name) == 0) {
             if(search) {
@@ -116,7 +116,7 @@ static void save_entry(const char *topic, const char *entry) {
     Highscore highscore = highscore_decode(msg.str);
     string_kill(&msg);
 
-    HighscoreEntry add = highscore_entry_decode(strc(entry));
+    HighscoreEntry_s add = highscore_entry_decode(strc(entry));
 
     highscore_add_entry(&highscore, add);
 

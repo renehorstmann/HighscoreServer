@@ -6,7 +6,7 @@
 #include "rhc/socket.h"
 #include "highscore.h"
 
-#define TYPE HighscoreEntry
+#define TYPE HighscoreEntry_s
 #define CLASS HE_Array
 #define FN_NAME he_array
 #include "rhc/dynarray.h"
@@ -43,12 +43,12 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
 //
 
 
-HighscoreEntry highscore_entry_decode(Str_s entry) {
+HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     Str_s splits[3];
     int splits_cnt = str_split(splits, 3, entry, '~');
     if(splits_cnt != 2) {
         log_warn("highscore_entry_decode failed to parse entry, splits_cnt!=2: %i", splits_cnt);
-        return (HighscoreEntry) {0};
+        return (HighscoreEntry_s) {0};
     }
 
     char *end;
@@ -56,10 +56,10 @@ HighscoreEntry highscore_entry_decode(Str_s entry) {
 
     if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
         log_warn("highscore_entry_decode failed to parse entry, invalid score or name length");
-        return (HighscoreEntry) {0};
+        return (HighscoreEntry_s) {0};
     }
 
-    HighscoreEntry self = {0};
+    HighscoreEntry_s self = {0};
     self.score = score;
     str_as_c(self.name, splits[1]);
     return self;
@@ -67,7 +67,7 @@ HighscoreEntry highscore_entry_decode(Str_s entry) {
 
 
 // out_entry_buffer should be HIGHSCORE_ENTRY_MAX_LENGTH big
-void highscore_entry_encode(HighscoreEntry self, char *out_entry_buffer) {
+void highscore_entry_encode(HighscoreEntry_s self, char *out_entry_buffer) {
     snprintf(out_entry_buffer, HIGHSCORE_ENTRY_MAX_LENGTH, "%i~%s\n", self.score, self.name);
 }
 
@@ -82,7 +82,7 @@ Highscore highscore_decode(Str_s msg) {
         if(str_empty(line))
             continue;
 
-        HighscoreEntry push = highscore_entry_decode(line);
+        HighscoreEntry_s push = highscore_entry_decode(line);
         if(push.name[0] == '\0')
             continue;
 
@@ -158,7 +158,15 @@ void highscore_kill(Highscore *self) {
     *self = (Highscore) {0};
 }
 
-bool highscore_send_entry(Highscore *self, HighscoreEntry send) {
+HighscoreEntry_s highscore_entry_new(const char *name, int score) {
+    assume(strlen(name) < HIGHSCORE_NAME_MAX_LENGTH, "highscore_entry_new failed, name too long");
+    HighscoreEntry_s self = {0};
+    strcpy(self.name, name);
+    self.score = score;
+    return self;
+}
+
+bool highscore_send_entry(Highscore *self, HighscoreEntry_s send) {
     Socket *so = socket_new(self->address, self->port);
     if(!socket_valid(so))
         return false;
