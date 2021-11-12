@@ -129,6 +129,8 @@ static void save_entry(const char *topic, const char *entry) {
 
     if(!file_write(file, save.str, true)) {
         printf("failed to save topic file: %s\n", file);
+    } else {
+        puts("new highscore saved");
     }
 
     string_kill(&save);
@@ -151,6 +153,8 @@ static void send_highscore(Socket *client, const char *topic) {
     stream_write_msg(stream, msg.data, msg.size);
     if(!string_valid(msg)) {
         puts("failed to send highscore");
+    } else {
+        puts("highscore send");
     }
 
     string_kill(&msg);
@@ -211,6 +215,7 @@ int main(int argc, char **argv) {
         if(socket_valid(client)) {
             puts("client connected");
             handle_client(client);
+            puts("client connection end");
         }
         socket_kill(&client);
     }

@@ -54,7 +54,7 @@ HighscoreEntry highscore_entry_decode(Str_s entry) {
     char *end;
     int score = (int) strtol(splits[0].data, &end, 10);
 
-    if(end != splits[1].data-2 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
+    if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
         log_warn("highscore_entry_decode failed to parse entry, invalid score or name length");
         return (HighscoreEntry) {0};
     }
