@@ -6,7 +6,7 @@
 
 #define HIGHSCORE_NAME_MAX_LENGTH 16
 #define HIGHSCORE_TOPIC_MAX_LENGTH 64
-#define HIGHSCORE_ADDRESS_MAX_LENGTH 16
+#define HIGHSCORE_ADDRESS_MAX_LENGTH 128
 
 typedef struct {
     char name[HIGHSCORE_NAME_MAX_LENGTH];   // null terminated
