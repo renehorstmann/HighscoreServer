@@ -11,7 +11,7 @@
 #define FN_NAME he_array
 #include "rhc/dynarray.h"
 
-#define HIGHSCORE_ENTRY_MAX_LENGTH 32
+#define HIGHSCORE_ENTRY_LENGTH 128
 
 static const uint8_t HIGHSCORE_READ = 0;
 static const uint8_t HIGHSCORE_WRITE_READ = 1;
@@ -24,8 +24,17 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
  *      HIGHSCORE_WRITE_READ: send an entry and receive the highscore msg
  * HIGHSCORE_TOPIC_MAX_LENGTH bytes:
  *      topic name, zero terminated
- * opt if HIGHSCORE_WRITE_READ -> HIGHSCORE_ENTRY_MAX_LENGTH bytes:
+ * opt if HIGHSCORE_WRITE_READ -> HIGHSCORE_ENTRY_LENGTH bytes:
  *      the entry to send
+ */
+
+/**
+ * entry is sens as:
+ * score as ascii
+ * ~
+ * name
+ * padding with 0
+ * last 21 chars: uint64_t as ascii
  */
 
 /**
@@ -37,13 +46,16 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
  */
 
 
-
 //
 // protected
 //
 
 
 HighscoreEntry_s highscore_entry_decode(Str_s entry) {
+    if(entry.size != HIGHSCORE_ENTRY_LENGTH) {
+        log_warn("highscore_entry_decode failed, entry.size is wrong: %zu", entry.size);
+        return (HighscoreEntry_s) {0};
+    }
     Str_s splits[3];
     int splits_cnt = str_split(splits, 3, entry, '~');
     if(splits_cnt != 2) {
@@ -54,7 +66,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     char *end;
     int score = (int) strtol(splits[0].data, &end, 10);
 
-    if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
+    if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size < HIGHSCORE_NAME_MAX_LENGTH) {
         log_warn("highscore_entry_decode failed to parse entry, invalid score or name length");
         return (HighscoreEntry_s) {0};
     }
@@ -62,13 +74,24 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     HighscoreEntry_s self = {0};
     self.score = score;
     str_as_c(self.name, splits[1]);
+
+    _Static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "wrong sizes");
+    uint64_t checksum = (uint64_t) strtoull(entry.data + entry.size - 22, NULL, 10);
+    if(!highscore_entry_check_valid(self, checksum)) {
+        log_warn("highscore_entry_decode failed to parse entry, invalid checksum");
+        return (HighscoreEntry_s) {0};
+    }
+
     return self;
 }
 
 
-// out_entry_buffer should be HIGHSCORE_ENTRY_MAX_LENGTH big
+// out_entry_buffer should be HIGHSCORE_ENTRY_LENGTH big
 void highscore_entry_encode(HighscoreEntry_s self, char *out_entry_buffer) {
-    snprintf(out_entry_buffer, HIGHSCORE_ENTRY_MAX_LENGTH, "%i~%s\n", self.score, self.name);
+    memset(out_entry_buffer, 0, HIGHSCORE_ENTRY_LENGTH);
+    snprintf(out_entry_buffer, HIGHSCORE_ENTRY_LENGTH, "%i~%s", self.score, self.name);
+    snprintf(&out_entry_buffer[HIGHSCORE_ENTRY_LENGTH-22], 21, "%llu",
+             (unsigned long long) highscore_entry_get_checksum(self));
 }
 
 
@@ -97,7 +120,7 @@ Highscore highscore_decode(Str_s msg) {
 String highscore_encode(Highscore self) {
     String s = string_new(1024);
     for(int i=0; i<self.entries_size; i++) {
-        char entry_buffer[HIGHSCORE_ENTRY_MAX_LENGTH];
+        char entry_buffer[HIGHSCORE_ENTRY_LENGTH];
         highscore_entry_encode(self.entries[i], entry_buffer);
         string_append(&s, strc(entry_buffer));
     }
@@ -109,13 +132,22 @@ String highscore_encode(Highscore self) {
 // public
 //
 
-Highscore highscore_new_receive(const char *topic, const char *address, uint16_t port) {
+Highscore highscore_new_receive(const char *topic, const char *address, uint16_t port_socket, uint16_t port_websocket) {
     assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore failed, invalid topic: %s", topic);
     assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore failed, invalid address: %s", address);
 
-    Socket *so = socket_new(address, port);
+    Highscore self = {0};
+    strcpy(self.topic, topic);
+    strcpy(self.address, address);
+#ifdef __EMSCRIPTEN__
+    self.port = port_websocket;
+#else
+    self.port = port_socket;
+#endif
+
+    Socket *so = socket_new(address, self.port);
     if(!socket_valid(so))
-        return (Highscore) {0};
+        return self;
 
     Stream_i stream = socket_get_stream(so);
 
@@ -132,7 +164,7 @@ Highscore highscore_new_receive(const char *topic, const char *address, uint16_t
     uint32_t size;
     stream_read_msg(stream, &size, sizeof size);
     if(!socket_valid(so))
-        return (Highscore) {0};
+        return self;
 
     size = endian_le_to_host32(size);
 
@@ -141,14 +173,18 @@ Highscore highscore_new_receive(const char *topic, const char *address, uint16_t
     stream_read_msg(stream, msg.data, size);
     if(!socket_valid(so)) {
         string_kill(&msg);
-        return (Highscore) {0};
+        return self;
     }
     socket_kill(&so);
 
-    Highscore self = highscore_decode(msg.str);
+    self = highscore_decode(msg.str);
     strcpy(self.topic, topic);
     strcpy(self.address, address);
-    self.port = port;
+#ifdef __EMSCRIPTEN__
+    self.port = port_websocket;
+#else
+    self.port = port_socket;
+#endif
     string_kill(&msg);
     return self;
 }
@@ -181,7 +217,7 @@ bool highscore_send_entry(Highscore *self, HighscoreEntry_s send) {
     strcpy(topic_buffer, self->topic);
     stream_write_msg(stream, topic_buffer, sizeof topic_buffer);
 
-    char entry_buffer[HIGHSCORE_ENTRY_MAX_LENGTH];
+    char entry_buffer[HIGHSCORE_ENTRY_LENGTH];
     highscore_entry_encode(send, entry_buffer);
     stream_write_msg(stream, entry_buffer, sizeof entry_buffer);
 

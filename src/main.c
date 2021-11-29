@@ -6,7 +6,7 @@
 #include "highscore.h"
 
 
-#define HIGHSCORE_ENTRY_MAX_LENGTH 32
+#define HIGHSCORE_ENTRY_LENGTH 128
 #define HIGHSCORE_MAX_ENTRIES 256
 
 static const uint8_t HIGHSCORE_READ = 0;
@@ -44,8 +44,8 @@ static void make_dirs(const char *topic) {
     char file[256];
     snprintf(file, 256, "topics/%s", topic);
 
-    char syscall[256];
-    snprintf(syscall, 256, "mkdir -p %s", file);
+    char syscall[256+32];
+    snprintf(syscall, 256+32, "mkdir -p %s", file);
 }
 
 static int highscore_sort_compare (const void *a, const void *b) {
@@ -122,7 +122,7 @@ static void save_entry(const char *topic, const char *entry) {
     Highscore highscore = highscore_decode(msg.str);
     string_kill(&msg);
 
-    HighscoreEntry_s add = highscore_entry_decode(strc(entry));
+    HighscoreEntry_s add = highscore_entry_decode((Str_s) {(char *) entry, HIGHSCORE_ENTRY_LENGTH});
 
     highscore_add_entry(&highscore, add);
 
@@ -191,14 +191,14 @@ static void handle_client(Socket *client) {
 
 
     if(mode == HIGHSCORE_WRITE_READ) {
-        char entry[HIGHSCORE_ENTRY_MAX_LENGTH];
+        char entry[HIGHSCORE_ENTRY_LENGTH];
         stream_read_msg(stream, entry, sizeof entry);
 
         if(!socket_valid(client)) {
             puts("failed to get entry");
             return;
         }
-        if(entry[0] == '\0' || entry[HIGHSCORE_ENTRY_MAX_LENGTH-1] != '\0') {
+        if(entry[0] == '\0' || entry[HIGHSCORE_ENTRY_LENGTH-1] != '\0') {
             puts("invalid entry");
             return;
         }
