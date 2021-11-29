@@ -21,7 +21,7 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
  * HIGHSCORE_TOPIC_MAX_LENGTH bytes:
  *      topic name, zero terminated
  * opt if HIGHSCORE_WRITE_READ -> HIGHSCORE_ENTRY_MAX_LENGTH bytes:
- *      the entry to send
+ *      the entry to send, new line terminated
  */
 
 /**
@@ -46,12 +46,14 @@ static void make_dirs(const char *topic) {
 
     char syscall[256+32];
     snprintf(syscall, 256+32, "mkdir -p %s", file);
+
+    system(syscall);
 }
 
 static int highscore_sort_compare (const void *a, const void *b) {
     const HighscoreEntry_s *entry_a = a;
     const HighscoreEntry_s *entry_b = b;
-    return entry_a->score - entry_b->score;
+    return entry_b->score - entry_a->score;
 }
 
 static void highscore_sort(Highscore *self) {
@@ -66,7 +68,7 @@ static void highscore_remove_entry(Highscore *self, int idx) {
 }
 
 static void highscore_add_new_entry(Highscore *self, HighscoreEntry_s add) {
-    self->entries = rhc_realloc(self->entries, self->entries_size+1);
+    self->entries = rhc_realloc(self->entries, sizeof *self->entries * (self->entries_size+1));
 
     for(int i=0; i<self->entries_size; i++) {
         if(self->entries[i].score < add.score) {
@@ -122,7 +124,7 @@ static void save_entry(const char *topic, const char *entry) {
     Highscore highscore = highscore_decode(msg.str);
     string_kill(&msg);
 
-    HighscoreEntry_s add = highscore_entry_decode((Str_s) {(char *) entry, HIGHSCORE_ENTRY_LENGTH});
+    HighscoreEntry_s add = highscore_entry_decode(strc(entry));
 
     highscore_add_entry(&highscore, add);
 
@@ -192,7 +194,7 @@ static void handle_client(Socket *client) {
 
     if(mode == HIGHSCORE_WRITE_READ) {
         char entry[HIGHSCORE_ENTRY_LENGTH];
-        stream_read_msg(stream, entry, sizeof entry);
+        stream_read_msg(stream, entry, HIGHSCORE_ENTRY_LENGTH);
 
         if(!socket_valid(client)) {
             puts("failed to get entry");

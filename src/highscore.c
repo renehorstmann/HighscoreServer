@@ -33,8 +33,9 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
  * score as ascii
  * ~
  * name
- * padding with 0
- * last 21 chars: uint64_t as ascii
+ * ~
+ * uint64_t as ascii
+ * padding to end with '\0'
  */
 
 /**
@@ -52,13 +53,13 @@ static const uint8_t HIGHSCORE_WRITE_READ = 1;
 
 
 HighscoreEntry_s highscore_entry_decode(Str_s entry) {
-    if(entry.size != HIGHSCORE_ENTRY_LENGTH) {
-        log_warn("highscore_entry_decode failed, entry.size is wrong: %zu", entry.size);
+    if(entry.size > HIGHSCORE_ENTRY_LENGTH-1) {
+        log_warn("highscore_entry_decode failed, entry.size is to long");
         return (HighscoreEntry_s) {0};
     }
-    Str_s splits[3];
-    int splits_cnt = str_split(splits, 3, entry, '~');
-    if(splits_cnt != 2) {
+    Str_s splits[4];
+    int splits_cnt = str_split(splits, 4, entry, '~');
+    if(splits_cnt != 3) {
         log_warn("highscore_entry_decode failed to parse entry, splits_cnt!=2: %i", splits_cnt);
         return (HighscoreEntry_s) {0};
     }
@@ -66,7 +67,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     char *end;
     int score = (int) strtol(splits[0].data, &end, 10);
 
-    if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size < HIGHSCORE_NAME_MAX_LENGTH) {
+    if(end != splits[1].data-1 || splits[1].size == 0 || splits[1].size >= HIGHSCORE_NAME_MAX_LENGTH) {
         log_warn("highscore_entry_decode failed to parse entry, invalid score or name length");
         return (HighscoreEntry_s) {0};
     }
@@ -76,7 +77,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     str_as_c(self.name, splits[1]);
 
     _Static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "wrong sizes");
-    uint64_t checksum = (uint64_t) strtoull(entry.data + entry.size - 22, NULL, 10);
+    uint64_t checksum = (uint64_t) strtoull(splits[2].data, NULL, 10);
     if(!highscore_entry_check_valid(self, checksum)) {
         log_warn("highscore_entry_decode failed to parse entry, invalid checksum");
         return (HighscoreEntry_s) {0};
@@ -89,8 +90,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
 // out_entry_buffer should be HIGHSCORE_ENTRY_LENGTH big
 void highscore_entry_encode(HighscoreEntry_s self, char *out_entry_buffer) {
     memset(out_entry_buffer, 0, HIGHSCORE_ENTRY_LENGTH);
-    snprintf(out_entry_buffer, HIGHSCORE_ENTRY_LENGTH, "%i~%s", self.score, self.name);
-    snprintf(&out_entry_buffer[HIGHSCORE_ENTRY_LENGTH-22], 21, "%llu",
+    snprintf(out_entry_buffer, HIGHSCORE_ENTRY_LENGTH, "%i~%s~%llu", self.score, self.name,
              (unsigned long long) highscore_entry_get_checksum(self));
 }
 
@@ -123,6 +123,7 @@ String highscore_encode(Highscore self) {
         char entry_buffer[HIGHSCORE_ENTRY_LENGTH];
         highscore_entry_encode(self.entries[i], entry_buffer);
         string_append(&s, strc(entry_buffer));
+        string_push(&s, '\n');
     }
     return s;
 }
@@ -219,7 +220,7 @@ bool highscore_send_entry(Highscore *self, HighscoreEntry_s send) {
 
     char entry_buffer[HIGHSCORE_ENTRY_LENGTH];
     highscore_entry_encode(send, entry_buffer);
-    stream_write_msg(stream, entry_buffer, sizeof entry_buffer);
+    stream_write_msg(stream, entry_buffer, HIGHSCORE_ENTRY_LENGTH);
 
     // recv from server
 
