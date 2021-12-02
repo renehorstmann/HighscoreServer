@@ -195,7 +195,8 @@ static int http_request(void *cls,
                         const char *method,
                         const char *version,
                         const char *upload_data, size_t *upload_data_size, void **ptr) {
-    Str_s topic = strc(url+1);
+    printf("request: %s\n", url);
+    Str_s topic = str_eat_str(strc(url), strc("/api/"));;
     if (str_empty(topic) || str_count(topic, '.') > 0) {
         return MHD_NO;
     }
@@ -262,8 +263,8 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // wait for pressed key to stop the server
-    getchar();
-    MHD_stop_daemon(d);
+    // wait for ever
+    system("tail -f /dev/null");
+    puts("waited for ever, closing the server?!?");
     return 0;
 }
