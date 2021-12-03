@@ -226,7 +226,7 @@ static int http_request(void *cls,
             MHD_get_connection_values(connection, MHD_POSTDATA_KIND, post_info_it, NULL);
             MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, post_info_it, NULL);
             MHD_get_connection_values(connection, MHD_FOOTER_KIND, post_info_it, NULL);
-            MHD_set_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data");
+            MHD_set_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data;");
             post_msg->postprocessor = MHD_create_post_processor(connection, 65536, http_iterate_post, post_msg);
             if (!post_msg->postprocessor) {
                 rhc_free(post_msg);
