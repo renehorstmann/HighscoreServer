@@ -216,11 +216,13 @@ static int http_request(void *cls,
             post_msg->postprocessor = MHD_create_post_processor(connection, 65536, http_iterate_post, post_msg);
             if (!post_msg->postprocessor) {
                 rhc_free(post_msg);
+                log_warn("failed to create post processor");
                 return MHD_NO;
             }
         }
         *ptr = post_msg;
-        return MHD_YES;
+//        return MHD_YES;
+        return http_send_highscore(connection, topic.data);
     }
 
     if (strcmp(method, "POST") == 0) {
@@ -228,6 +230,7 @@ static int http_request(void *cls,
         if (*upload_data_size != 0) {
             MHD_post_process(post_msg->postprocessor, upload_data, *upload_data_size);
             *upload_data_size = 0;
+            log_warn("processed some data...");
             return MHD_YES;
         } else if (1 || post_msg->got_entry) {
             return http_send_highscore(connection, topic.data);
@@ -239,6 +242,7 @@ static int http_request(void *cls,
     }
 
     // unexpected method
+    log_warn("unexpected method");
     return MHD_NO;
 }
 
