@@ -227,7 +227,7 @@ static int http_request(void *cls,
             MHD_post_process(post_msg->postprocessor, upload_data, *upload_data_size);
             *upload_data_size = 0;
             return MHD_YES;
-        } else if (post_msg->got_entry) {
+        } else if (1 || post_msg->got_entry) {
             return http_send_highscore(connection, topic.data);
         }
     }
@@ -266,6 +266,6 @@ int main(int argc, char **argv) {
 
     // wait for ever
     system("tail -f /dev/null");
-    puts("waited for ever, closing the server?!?");
+    puts("Server closed (keyboard interrupt?)");
     return 0;
 }
