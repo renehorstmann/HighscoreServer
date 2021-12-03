@@ -213,6 +213,7 @@ static int http_request(void *cls,
         HttpPostMsg *post_msg = rhc_calloc(sizeof *post_msg);
         str_as_c(post_msg->topic, topic);
         if (strcmp(method, "POST") == 0) {
+            MHD_set_connection_value(connection, MHD_POSTDATA_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data");
             post_msg->postprocessor = MHD_create_post_processor(connection, 65536, http_iterate_post, post_msg);
             if (!post_msg->postprocessor) {
                 rhc_free(post_msg);
