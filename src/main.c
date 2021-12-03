@@ -158,6 +158,8 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
     }
 
     struct MHD_Response *response = MHD_create_response_from_buffer(msg.size, msg.data, MHD_RESPMEM_MUST_COPY);
+    MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
+    MHD_add_response_header(response, MHD_HTTP_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
     int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
