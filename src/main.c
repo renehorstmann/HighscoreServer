@@ -176,6 +176,7 @@ static int http_iterate_post(void *postmsg_cls, enum MHD_ValueKind kind, const c
              const char *filename, const char *content_type,
              const char *transfer_encoding, const char *data,
              uint64_t off, size_t size) {
+    printf("iterate POST data: %s\n", key);
     HttpPostMsg *post_msg = postmsg_cls;
     if(strcmp(key, "entry") == 0) {
         if(strlen(data) >= HIGHSCORE_MAX_ENTRY_LENGTH) {
@@ -195,7 +196,7 @@ static int http_request(void *cls,
                         const char *method,
                         const char *version,
                         const char *upload_data, size_t *upload_data_size, void **ptr) {
-    printf("request: %s\n", url);
+    printf("request: %s, method: %s\n", url, method);
     Str_s topic = str_eat_str(strc(url), strc("/api/"));;
     if (str_empty(topic) || str_count(topic, '.') > 0) {
         return MHD_NO;
