@@ -192,6 +192,14 @@ static int http_iterate_post(void *postmsg_cls, enum MHD_ValueKind kind, const c
     return MHD_YES;
 }
 
+static int post_info_it (void *cls,
+                         enum MHD_ValueKind kind,
+                         const char *key,
+                         const char *value) {
+    printf("kind: %i key: <%s> = value: <%s>\n", kind, key, value);
+    return MHD_YES;
+}
+
 static int http_request(void *cls,
                         struct MHD_Connection *connection,
                         const char *url,
@@ -213,7 +221,12 @@ static int http_request(void *cls,
         HttpPostMsg *post_msg = rhc_calloc(sizeof *post_msg);
         str_as_c(post_msg->topic, topic);
         if (strcmp(method, "POST") == 0) {
-            MHD_set_connection_value(connection, MHD_POSTDATA_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data");
+            MHD_get_connection_values(connection, MHD_HEADER_KIND, post_info_it, NULL);
+            MHD_get_connection_values(connection, MHD_COOKIE_KIND, post_info_it, NULL);
+            MHD_get_connection_values(connection, MHD_POSTDATA_KIND, post_info_it, NULL);
+            MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, post_info_it, NULL);
+            MHD_get_connection_values(connection, MHD_FOOTER_KIND, post_info_it, NULL);
+            MHD_set_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data");
             post_msg->postprocessor = MHD_create_post_processor(connection, 65536, http_iterate_post, post_msg);
             if (!post_msg->postprocessor) {
                 rhc_free(post_msg);
