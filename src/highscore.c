@@ -131,14 +131,15 @@ HighscoreEntry_s highscore_entry_new(const char *name, int score) {
 }
 
 #ifdef OPTION_FETCH
-Highscore highscore_new_receive(const char *topic, const char *address, uint16_t port) {
-    assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore failed, invalid topic: %s", topic);
-    assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore failed, invalid address: %s", address);
+Highscore highscore_new_get(const char *address, const char *topic) {
+    assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore_new_get failed, invalid address: %s", address);
+    assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore_new_get failed, invalid topic: %s", topic);
     // todo
-#endif
+}
 
-#ifdef OPTION_FETCH
-bool highscore_send_entry(Highscore *self, HighscoreEntry_s send) {
+Highscore highscore_new_post(const char *address, const char *topic, HighscoreEntry_s send) {
+    assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore_new_post failed, invalid address: %s", address);
+    assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore_new_post failed, invalid topic: %s", topic);
     // todo
 }
 #endif

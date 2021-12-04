@@ -43,11 +43,11 @@ HighscoreEntry_s highscore_entry_new(const char *name, int score);
 #ifdef OPTION_FETCH
 // blocks until the highscore is received (if possible)
 // if an error occures, the highscore remains empty
-Highscore highscore_new_receive(const char *topic, const char *address, uint16_t port);
+Highscore highscore_new_get(const char *address, const char *topic);
 
 // blocks until the highscore is updated and the new version is received (if possible)
 // returns true if the transmission was successfully
-bool highscore_send_entry(Highscore *self, HighscoreEntry_s send);
+Highscore highscore_new_post(const char *address, const char *topic, HighscoreEntry_s send);
 #endif
 
 #endif //HIGHSCORESERVER_HIGHSCORE_H
