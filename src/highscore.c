@@ -117,7 +117,7 @@ String highscore_encode(Highscore self) {
 // public
 //
 
-Highscore highscore_new_str(Str_s highscore_msg) {
+Highscore highscore_new_msg(Str_s highscore_msg) {
     return highscore_decode(highscore_msg);
 }
 
@@ -132,4 +132,11 @@ HighscoreEntry_s highscore_entry_new(const char *name, int score) {
     strcpy(self.name, name);
     self.score = score;
     return self;
+}
+
+String highscore_entry_to_msg(HighscoreEntry_s self) {
+    String res = string_new(HIGHSCORE_MAX_ENTRY_LENGTH);
+    highscore_entry_encode(self, res.data);
+    res.size = strlen(res.data);
+    return res;
 }

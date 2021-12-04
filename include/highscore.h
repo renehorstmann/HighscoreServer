@@ -34,22 +34,14 @@ uint64_t highscore_entry_get_checksum(HighscoreEntry_s self);
 // public highscore stuff:
 //
 
-Highscore highscore_new_str(Str_s highscore_msg);
+Highscore highscore_new_msg(Str_s highscore_msg);
 
 void highscore_kill(Highscore *self);
 
 // create a new entry by name and score
 HighscoreEntry_s highscore_entry_new(const char *name, int score);
 
+String highscore_entry_to_msg(HighscoreEntry_s self);
 
-#ifdef OPTION_FETCH
-// blocks until the highscore is received (if possible)
-// if an error occures, the highscore remains empty
-Highscore highscore_new_get(const char *address, const char *topic);
-
-// blocks until the highscore is updated and the new version is received (if possible)
-// returns true if the transmission was successfully
-Highscore highscore_new_post(const char *address, const char *topic, HighscoreEntry_s send);
-#endif
 
 #endif //HIGHSCORESERVER_HIGHSCORE_H
