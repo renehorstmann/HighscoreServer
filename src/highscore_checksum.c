@@ -1,12 +1,9 @@
 #include "highscore.h"
 
+
 //
 // example implementation for the checksum functions
 //
-
-bool highscore_entry_check_valid(HighscoreEntry_s self, uint64_t checksum) {
-    return checksum == self.name[0] * 456;
-}
 
 //
 // function prototype!

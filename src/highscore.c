@@ -62,7 +62,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
 
     _Static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "wrong sizes");
     uint64_t checksum = (uint64_t) strtoull(splits[2].data, NULL, 10);
-    if(!highscore_entry_check_valid(self, checksum)) {
+    if(highscore_entry_get_checksum(self) != checksum) {
         log_warn("highscore_entry_decode failed to parse entry, invalid checksum");
         return (HighscoreEntry_s) {0};
     }

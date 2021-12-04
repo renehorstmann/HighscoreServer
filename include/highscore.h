@@ -25,13 +25,6 @@ typedef struct {
 //
 // function prototype!
 // this function implementation should not be made public available
-// return true, if the highscore entry is valid
-//
-bool highscore_entry_check_valid(HighscoreEntry_s self, uint64_t checksum);
-
-//
-// function prototype!
-// this function implementation should not be made public available
 // return the checksum for the given entry
 //
 uint64_t highscore_entry_get_checksum(HighscoreEntry_s self);
