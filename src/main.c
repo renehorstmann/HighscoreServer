@@ -48,7 +48,7 @@ String highscore_encode(Highscore self);
 
 static struct {
     pthread_mutex_t lock;
-} L;
+} L = {PTHREAD_MUTEX_INITIALIZER};
 
 static void make_dirs(const char *topic) {
 #ifdef DEBUG_MODE
@@ -169,7 +169,7 @@ static bool save_entry(Str_s topic, Str_s entry) {
     return true;
 }
 
-static enum MHD_Result http_send_highscore(struct MHD_Connection *connection, const char *topic) {
+static int http_send_highscore(struct MHD_Connection *connection, const char *topic) {
     puts("http_send_highscore");
     char file[256];
     snprintf(file, 256, "topics/%s.txt", topic);
@@ -192,19 +192,19 @@ static enum MHD_Result http_send_highscore(struct MHD_Connection *connection, co
     MHD_add_response_header(response, MHD_HTTP_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
     int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-    if(!ret)
+    if (!ret)
         printf("http_send_highscore failed to queue response");
     MHD_destroy_response(response);
     string_kill(&msg);
     return ret;
 }
 
-static enum MHD_Result http_request(void *cls,
-                                    struct MHD_Connection *connection,
-                                    const char *url,
-                                    const char *method,
-                                    const char *version,
-                                    const char *upload_data, size_t *upload_data_size, void **ptr) {
+static int http_request(void *cls,
+                        struct MHD_Connection *connection,
+                        const char *url,
+                        const char *method,
+                        const char *version,
+                        const char *upload_data, size_t *upload_data_size, void **ptr) {
     printf("http_request: %s, method: %s\n", url, method);
     Str_s topic = str_eat_str(strc(url), strc("/api/"));
 
@@ -226,7 +226,7 @@ static enum MHD_Result http_request(void *cls,
         if (!*ptr) {
             *ptr = (void *) 1;
             puts("http_request POST start");
-            if(*upload_data_size>0) {
+            if (*upload_data_size > 0) {
                 puts("http_request POST start failed, got data?");
                 return MHD_NO;
             }
@@ -261,7 +261,6 @@ static enum MHD_Result http_request(void *cls,
 
 int main(int argc, char **argv) {
     puts("Server start");
-    L.lock = PTHREAD_MUTEX_INITIALIZER;
     struct MHD_Daemon *d = MHD_start_daemon(
             0 | MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_THREAD_PER_CONNECTION,
             SERVER_PORT,
