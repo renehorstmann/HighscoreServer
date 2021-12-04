@@ -9,7 +9,6 @@
 #define FN_NAME he_array
 #include "rhc/dynarray.h"
 
-#define HIGHSCORE_MAX_ENTRY_LENGTH 128
 
 
 /**
@@ -134,9 +133,18 @@ HighscoreEntry_s highscore_entry_new(const char *name, int score) {
     return self;
 }
 
-String highscore_entry_to_msg(HighscoreEntry_s self) {
+String highscore_entry_to_string(HighscoreEntry_s self) {
     String res = string_new(HIGHSCORE_MAX_ENTRY_LENGTH);
     highscore_entry_encode(self, res.data);
     res.size = strlen(res.data);
     return res;
+}
+
+Str_s highscore_entry_into_buffer(HighscoreEntry_s self, Str_s buffer) {
+    if(buffer.size < HIGHSCORE_MAX_ENTRY_LENGTH) {
+        log_wtf("highscore_entry_into_buffer failed, buffer size to small");
+        memset(buffer.data, 0, buffer.size);
+    }
+    highscore_entry_encode(self, buffer.data);
+    return strc(buffer.data);
 }

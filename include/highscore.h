@@ -3,10 +3,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "rhc/types.h"
 
 #define HIGHSCORE_NAME_MAX_LENGTH 16
 #define HIGHSCORE_TOPIC_MAX_LENGTH 64
 #define HIGHSCORE_ADDRESS_MAX_LENGTH 128
+#define HIGHSCORE_MAX_ENTRY_LENGTH 128
 
 typedef struct {
     char name[HIGHSCORE_NAME_MAX_LENGTH];   // null terminated
@@ -41,7 +43,11 @@ void highscore_kill(Highscore *self);
 // create a new entry by name and score
 HighscoreEntry_s highscore_entry_new(const char *name, int score);
 
-String highscore_entry_to_msg(HighscoreEntry_s self);
+String highscore_entry_to_string(HighscoreEntry_s self);
+
+// buffer should be at least HIGHSCORE_MAX_ENTRY_LENGTH big
+// returns buffer with the new size
+Str_s highscore_entry_into_buffer(HighscoreEntry_s self, Str_s buffer);
 
 
 #endif //HIGHSCORESERVER_HIGHSCORE_H
