@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <microhttpd.h>
+#include <pthread.h>
 
 #include "rhc/rhc_impl.h"
 
@@ -12,12 +13,15 @@
 
 #define SERVER_PORT 10000
 
+//#define DEBUG_MODE
 
 /**
  * HTTP Server API:
  * GET /path/to/topic
  *      returns the topic file, if available
- * POST /path/to/topic  entry=<SCORE>~<NAME>~<CHECKSUM>
+ * POST /path/to/topic
+ *      "Content-Type: plain/text" (is ignored)
+ *      data="<SCORE>~<NAME>~<CHECKSUM>"
  *      saves the entry under the topic and returns the topic file
  */
 
@@ -42,7 +46,14 @@ Highscore highscore_decode(Str_s msg);
 String highscore_encode(Highscore self);
 
 
+static struct {
+    pthread_mutex_t lock;
+} L;
+
 static void make_dirs(const char *topic) {
+#ifdef DEBUG_MODE
+    puts("MAKE_DIRS not performed, in DEBUG_MODE");
+#else
     char file[256];
     snprintf(file, 256, "topics/%s", topic);
 
@@ -50,6 +61,7 @@ static void make_dirs(const char *topic) {
     snprintf(syscall, 256 + 32, "mkdir -p %s", file);
 
     system(syscall);
+#endif
 }
 
 static int highscore_sort_compare(const void *a, const void *b) {
@@ -115,43 +127,61 @@ static void highscore_add_entry(Highscore *self, HighscoreEntry_s add) {
     }
 }
 
-static void save_entry(const char *topic, const char *entry) {
-    make_dirs(topic);
+// topic and entry must be 0 terminated!
+// returns false if the entry was not valid
+static bool save_entry(Str_s topic, Str_s entry) {
+    HighscoreEntry_s add = highscore_entry_decode(entry);
+    if (add.name[0] == '\0')
+        return false;
 
+    make_dirs(topic.data);
     char file[256];
-    snprintf(file, 256, "topics/%s.txt", topic);
+    snprintf(file, 256, "topics/%s.txt", topic.data);
 
-    String msg = file_read(file, true);
+    pthread_mutex_lock(&L.lock);
+    {
+        String msg = file_read(file, true);
 
-    Highscore highscore = highscore_decode(msg.str);
-    string_kill(&msg);
+        Highscore highscore = highscore_decode(msg.str);
+        string_kill(&msg);
 
-    HighscoreEntry_s add = highscore_entry_decode(strc(entry));
+        highscore_add_entry(&highscore, add);
 
-    highscore_add_entry(&highscore, add);
+        if (highscore.entries_size > HIGHSCORE_MAX_ENTRIES) {
+            highscore.entries_size = HIGHSCORE_MAX_ENTRIES;
+        }
 
-    if (highscore.entries_size > HIGHSCORE_MAX_ENTRIES) {
-        highscore.entries_size = HIGHSCORE_MAX_ENTRIES;
+        highscore_sort(&highscore);
+
+        String save = highscore_encode(highscore);
+        highscore_kill(&highscore);
+
+        if (!file_write(file, save.str, true)) {
+            printf("failed to save topic file: %s\n", file);
+        } else {
+            puts("new highscore saved");
+        }
+
+        string_kill(&save);
     }
+    pthread_mutex_unlock(&L.lock);
 
-    highscore_sort(&highscore);
-
-    String save = highscore_encode(highscore);
-    highscore_kill(&highscore);
-
-    if (!file_write(file, save.str, true)) {
-        printf("failed to save topic file: %s\n", file);
-    } else {
-        puts("new highscore saved");
-    }
-
-    string_kill(&save);
+    return true;
 }
 
-static int http_send_highscore(struct MHD_Connection *connection, const char *topic) {
+static enum MHD_Result http_send_highscore(struct MHD_Connection *connection, const char *topic) {
+    puts("http_send_highscore");
     char file[256];
     snprintf(file, 256, "topics/%s.txt", topic);
-    String msg = file_read(file, true);
+
+    String msg;
+
+    pthread_mutex_lock(&L.lock);
+    {
+        msg = file_read(file, true);
+    }
+    pthread_mutex_unlock(&L.lock);
+
     if (!string_valid(msg)) {
         printf("failed to read topic file: %s\n", topic);
         return MHD_NO;
@@ -162,140 +192,93 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
     MHD_add_response_header(response, MHD_HTTP_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
     int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    if(!ret)
+        printf("http_send_highscore failed to queue response");
     MHD_destroy_response(response);
     string_kill(&msg);
     return ret;
 }
 
+static enum MHD_Result http_request(void *cls,
+                                    struct MHD_Connection *connection,
+                                    const char *url,
+                                    const char *method,
+                                    const char *version,
+                                    const char *upload_data, size_t *upload_data_size, void **ptr) {
+    printf("http_request: %s, method: %s\n", url, method);
+    Str_s topic = str_eat_str(strc(url), strc("/api/"));
 
-typedef struct {
-    struct MHD_PostProcessor *postprocessor;
-    char topic[HIGHSCORE_TOPIC_MAX_LENGTH];
-    bool got_entry;
-} HttpPostMsg;
-
-static int http_iterate_post(void *postmsg_cls, enum MHD_ValueKind kind, const char *key,
-             const char *filename, const char *content_type,
-             const char *transfer_encoding, const char *data,
-             uint64_t off, size_t size) {
-    printf("iterate POST data: %s\n", key);
-    HttpPostMsg *post_msg = postmsg_cls;
-    if(strcmp(key, "entry") == 0) {
-        if(strlen(data) >= HIGHSCORE_MAX_ENTRY_LENGTH) {
-            printf("post entry failed, entry to large");
-            return MHD_YES;
-        }
-        save_entry(post_msg->topic, data);
-        post_msg->got_entry = true;
-        return MHD_NO;  // stop iterating the post message
-    }
-    return MHD_YES;
-}
-
-static int post_info_it (void *cls,
-                         enum MHD_ValueKind kind,
-                         const char *key,
-                         const char *value) {
-    printf("kind: %i key: <%s> = value: <%s>\n", kind, key, value);
-    return MHD_YES;
-}
-
-static int http_request(void *cls,
-                        struct MHD_Connection *connection,
-                        const char *url,
-                        const char *method,
-                        const char *version,
-                        const char *upload_data, size_t *upload_data_size, void **ptr) {
-    printf("request: %s, method: %s\n", url, method);
-    Str_s topic = str_eat_str(strc(url), strc("/api/"));;
     if (str_empty(topic) || str_count(topic, '.') > 0) {
+        puts("http_request stopped, topic invalid");
         return MHD_NO;
     }
 
-    if(topic.size>=HIGHSCORE_TOPIC_MAX_LENGTH) {
-        log_warn("http request failed, topic to large");
+    if (topic.size >= HIGHSCORE_TOPIC_MAX_LENGTH) {
+        puts("http_request stopped, topic to large");
         return MHD_NO;
-    }
-
-    if (!*ptr) {
-        HttpPostMsg *post_msg = rhc_calloc(sizeof *post_msg);
-        str_as_c(post_msg->topic, topic);
-        if (strcmp(method, "POST") == 0) {
-            MHD_get_connection_values(connection, MHD_HEADER_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_COOKIE_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_POSTDATA_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_FOOTER_KIND, post_info_it, NULL);
-
-            puts("set form data");
-            MHD_set_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONTENT_TYPE, "multipart/form-data;");
-
-            MHD_get_connection_values(connection, MHD_HEADER_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_COOKIE_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_POSTDATA_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, post_info_it, NULL);
-            MHD_get_connection_values(connection, MHD_FOOTER_KIND, post_info_it, NULL);
-
-            puts("create post processor...");
-            post_msg->postprocessor = MHD_create_post_processor(connection, 65536, http_iterate_post, post_msg);
-            if (!post_msg->postprocessor) {
-                rhc_free(post_msg);
-                log_warn("failed to create post processor");
-                return MHD_NO;
-            }
-        }
-        *ptr = post_msg;
-//        return MHD_YES;
-        return http_send_highscore(connection, topic.data);
-    }
-
-    if (strcmp(method, "POST") == 0) {
-        HttpPostMsg *post_msg = *ptr;
-        if (*upload_data_size != 0) {
-            MHD_post_process(post_msg->postprocessor, upload_data, *upload_data_size);
-            *upload_data_size = 0;
-            log_warn("processed some data...");
-            return MHD_YES;
-        } else if (1 || post_msg->got_entry) {
-            return http_send_highscore(connection, topic.data);
-        }
     }
 
     if (strcmp(method, "GET") == 0) {
         return http_send_highscore(connection, topic.data);
     }
 
+    if (strcmp(method, "POST") == 0) {
+        if (!*ptr) {
+            *ptr = (void *) 1;
+            puts("http_request POST start");
+            if(*upload_data_size>0) {
+                puts("http_request POST start failed, got data?");
+                return MHD_NO;
+            }
+            // here could be checked for Content-Type == plain/text
+
+            // request not finished yet
+            return MHD_YES;
+        }
+
+        if (upload_data) {
+            puts("http_request POST got data");
+            String entry = string_new_clone((Str_s) {(char *) upload_data, *upload_data_size});
+            bool ok = save_entry(topic, entry.str);
+            string_kill(&entry);
+            if (!ok)
+                return MHD_NO;
+
+            // upload_data_size consumed (this is important!)
+            *upload_data_size = 0;
+            // request not finished yet
+            return MHD_YES;
+        }
+
+        puts("http_request POST end");
+        return http_send_highscore(connection, topic.data);
+    }
+
     // unexpected method
-    log_warn("unexpected method");
+    puts("unexpected method");
     return MHD_NO;
-}
-
-static void http_request_completed(void *cls, struct MHD_Connection *connection,
-                       void **post_msg_cls, enum MHD_RequestTerminationCode toe) {
-    HttpPostMsg *post_msg = *post_msg_cls;
-    if(!post_msg) return;
-    if(post_msg->postprocessor)
-        MHD_destroy_post_processor(post_msg->postprocessor);
-
-    rhc_free(post_msg);
-    *post_msg_cls = NULL;
 }
 
 int main(int argc, char **argv) {
     puts("Server start");
+    L.lock = PTHREAD_MUTEX_INITIALIZER;
     struct MHD_Daemon *d = MHD_start_daemon(
-            MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_THREAD_PER_CONNECTION,
+            0 | MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_THREAD_PER_CONNECTION,
             SERVER_PORT,
             NULL, NULL, &http_request, NULL,
-            MHD_OPTION_NOTIFY_COMPLETED, http_request_completed, NULL,
             MHD_OPTION_END);
     if (!d) {
-        log_error("failed to start the server");
+        puts("failed to start the server");
         exit(EXIT_FAILURE);
     }
 
+#ifdef DEBUG_MODE
+    // wait for key
+    getchar();
+#else
     // wait for ever
     system("tail -f /dev/null");
-    puts("Server closed (keyboard interrupt?)");
+#endif
+    puts("Server closed");
     return 0;
 }

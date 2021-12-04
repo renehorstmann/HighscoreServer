@@ -44,7 +44,7 @@ HighscoreEntry_s highscore_entry_decode(Str_s entry) {
     Str_s splits[4];
     int splits_cnt = str_split(splits, 4, entry, '~');
     if(splits_cnt != 3) {
-        log_warn("highscore_entry_decode failed to parse entry, splits_cnt!=2: %i", splits_cnt);
+        log_warn("highscore_entry_decode failed to parse entry, splits_cnt!=3: %i", splits_cnt);
         return (HighscoreEntry_s) {0};
     }
 
