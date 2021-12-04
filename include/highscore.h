@@ -34,6 +34,8 @@ uint64_t highscore_entry_get_checksum(HighscoreEntry_s self);
 // public highscore stuff:
 //
 
+Highscore highscore_new_str(Str_s highscore_msg);
+
 void highscore_kill(Highscore *self);
 
 // create a new entry by name and score

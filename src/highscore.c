@@ -117,6 +117,10 @@ String highscore_encode(Highscore self) {
 // public
 //
 
+Highscore highscore_new_str(Str_s highscore_msg) {
+    return highscore_decode(highscore_msg);
+}
+
 void highscore_kill(Highscore *self) {
     rhc_free(self->entries);
     *self = (Highscore) {0};
@@ -129,17 +133,3 @@ HighscoreEntry_s highscore_entry_new(const char *name, int score) {
     self.score = score;
     return self;
 }
-
-#ifdef OPTION_FETCH
-Highscore highscore_new_get(const char *address, const char *topic) {
-    assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore_new_get failed, invalid address: %s", address);
-    assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore_new_get failed, invalid topic: %s", topic);
-    // todo
-}
-
-Highscore highscore_new_post(const char *address, const char *topic, HighscoreEntry_s send) {
-    assume(strlen(address) < HIGHSCORE_ADDRESS_MAX_LENGTH, "highscore_new_post failed, invalid address: %s", address);
-    assume(strlen(topic) < HIGHSCORE_TOPIC_MAX_LENGTH, "highscore_new_post failed, invalid topic: %s", topic);
-    // todo
-}
-#endif
