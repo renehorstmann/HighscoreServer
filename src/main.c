@@ -64,14 +64,64 @@ static void make_dirs(const char *topic) {
 #endif
 }
 
+
+static bool check_sorted(void *array, int n, size_t item_size, int (*comp_fun)(const void *a, const void *b)) {
+    for(int i=0; i<n-1; i++) {
+        void *a = ((char*) array)+i*item_size;
+        void *b = ((char*) array)+(i+1)*item_size;
+        if (comp_fun(a, b) > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// bubble sort
+// not used, but here for... stuff... ... ...
+static void bsort(void *array, int n, size_t item_size, int (*comp_fun)(const void *a, const void *b)) {
+    void *tmp = malloc(item_size);
+    for (int i = 1; i < n; i++){
+        for (int j = 0; j < n - 1 ; j++){
+            void *a = ((char*) array)+i*item_size;
+            void *b = ((char*) array)+j*item_size;
+            if (comp_fun(a, b) < 0) {
+                memcpy(tmp, b, item_size);
+                memcpy(b, a, item_size);
+                memcpy(a, tmp, item_size);
+            }
+        }
+    }
+    free(tmp);
+}
+
+// sorted bubble sort
+// if the a and b are equal, they are not swapped!
+static void sbsort(void *array, int n, size_t item_size, int (*comp_fun)(const void *a, const void *b)) {
+    void *tmp = malloc(item_size);
+    for (int i = 1; i < n; i++){
+        for (int j = 0; j < n-1 ; j++){
+            void *a = ((char*) array)+j*item_size;
+            void *b = ((char*) array)+(j+1)*item_size;
+            if (comp_fun(a, b) > 0) {
+                memcpy(tmp, b, item_size);
+                memcpy(b, a, item_size);
+                memcpy(a, tmp, item_size);
+            }
+        }
+    }
+    free(tmp);
+}
 static int highscore_sort_compare(const void *a, const void *b) {
     const HighscoreEntry_s *entry_a = a;
     const HighscoreEntry_s *entry_b = b;
     return entry_b->score - entry_a->score;
 }
 
+
 static void highscore_sort(Highscore *self) {
-    qsort(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare);
+    if(!check_sorted(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare)) {
+        sbsort(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare);
+    }
 }
 
 static void highscore_remove_entry(Highscore *self, int idx) {
