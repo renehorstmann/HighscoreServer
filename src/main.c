@@ -121,6 +121,7 @@ static int highscore_sort_compare(const void *a, const void *b) {
 static void highscore_sort(Highscore *self) {
     if(!check_sorted(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare)) {
         sbsort(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare);
+        puts("highscore sorted...?!?");
     }
 }
 
