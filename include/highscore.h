@@ -7,7 +7,6 @@
 
 #define HIGHSCORE_NAME_MAX_LENGTH 16 // 16 chars, excl null terminator (so buf size = 17)
 #define HIGHSCORE_TOPIC_MAX_LENGTH 64
-#define HIGHSCORE_ADDRESS_MAX_LENGTH 128
 #define HIGHSCORE_MAX_ENTRY_LENGTH 128
 
 typedef struct {
@@ -16,9 +15,6 @@ typedef struct {
 } HighscoreEntry_s;
 
 typedef struct {
-    char topic[HIGHSCORE_TOPIC_MAX_LENGTH];   // null terminated
-    char address[HIGHSCORE_ADDRESS_MAX_LENGTH];   // null terminated
-    uint16_t port;
     HighscoreEntry_s *entries;
     int entries_size;
 } Highscore;

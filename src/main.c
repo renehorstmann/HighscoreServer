@@ -157,21 +157,22 @@ static void highscore_add_entry(Highscore *self, HighscoreEntry_s add) {
     if (add.name[0] == '\0')
         return;
 
-    HighscoreEntry_s *search = NULL;
+    int search = -1;
     for (int i = 0; i < self->entries_size; i++) {
         if (strcmp(self->entries[i].name, add.name) == 0) {
-            if (search) {
+            if (search>=0) {
                 highscore_remove_entry(self, i);
-                i--;
+                i--;    // retry the new entry on i, cause the old has been removed
                 continue;
             }
-            search = &self->entries[i];
+            search = i;
         }
     }
 
-    if (search) {
-        if (search->score < add.score) {
-            search->score = add.score;
+    if (search>=0) {
+        if (self->entries[search].score < add.score) {
+            highscore_remove_entry(self, search);
+            highscore_add_new_entry(self, add);
         }
     } else {
         highscore_add_new_entry(self, add);
