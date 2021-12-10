@@ -19,3 +19,10 @@ add_executable(highscoreserver ${SRCS})
 
 find_library(LIB_MHD microhttpd required)
 target_link_libraries(highscoreserver ${LIB_MHD})
+
+if(HIGHSCORE_SECRET_KEY)
+    message(-DHIGHSCORE_SECRET_KEY=${HIGHSCORE_SECRET_KEY})
+    add_definitions(-DHIGHSCORE_SECRET_KEY=${HIGHSCORE_SECRET_KEY})
+else()
+    message("No HIGHSCORE_SECRET_KEY")
+endif()
