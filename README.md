@@ -2,7 +2,7 @@
 A highscore server for some of my games
 
 ## Games
- - [Swarm](https://github.com/renehorstmann/swarm)
+ - [Swarm](https://github.com/renehorstmann/GMTKgamejam21)
 
 
 ## Author
