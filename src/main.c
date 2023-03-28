@@ -3,17 +3,27 @@
 #include <microhttpd.h>
 #include <pthread.h>
 
-#include "rhc/rhc_impl.h"
+#include "s/s_impl.h"
 
 #include "highscore.h"
 
 
-#define HIGHSCORE_MAX_ENTRY_LENGTH 128
-#define HIGHSCORE_MAX_ENTRIES 256
+// so the number score position ranges from 1:999
+#define HIGHSCORE_MAX_ENTRIES 999
+
+// max ring buffer size
+#define HIGHSCORE_PACK_MAX_ENTRIES 128
+
+
 
 #define SERVER_PORT 10000
 
-//#define DEBUG_MODE
+
+#define DEBUG_MODE
+
+/**
+ * Highscores: (all topics that does NOT start with /pack/ )
+ */
 
 /**
  * HTTP Server API:
@@ -35,15 +45,50 @@
  * padding to end with '\0'
  */
 
+/**
+ * Packs: (all topics that does start with /pack/ )
+ */
+
+/**
+ * HTTP Server API:
+ * GET /pack/path/to/topic
+ *      returns the topic file, if available
+ * POST /pack/path/to/topic
+ *      "Content-Type: plain/text" (is ignored)
+ *      data="<CHECKSUM>~<TEXT>"
+ *      saves the entry under the topic and returns the topic file
+ *      saves and returns in a FIFO ring buffer
+ */
+
+/**
+ * entry is sens as:
+ * uint64_t as ascii
+ * ~
+ * text
+ * padding to end with '\0'
+ */
+
 // protected functions:
 
-HighscoreEntry_s highscore_entry_decode(Str_s entry);
+HighscoreEntry_s highscore_entry_decode(sStr_s entry);
 
 void highscore_entry_encode(HighscoreEntry_s self, char *out_entry_buffer);
 
-Highscore highscore_decode(Str_s msg);
+Highscore highscore_decode(sStr_s msg);
 
-String highscore_encode(Highscore self);
+sString *highscore_encode(Highscore self);
+
+
+uint64_t highscorepack_entry_get_checksum(HighscorePackEntry_s self);
+
+HighscorePackEntry_s highscorepack_entry_decode(sStr_s entry);
+
+void highscorepack_entry_encode(HighscorePackEntry_s self, char *out_entry_buffer);
+
+HighscorePack highscorepack_decode(sStr_s msg);
+
+sString *highscorepack_encode(HighscorePack self);
+
 
 
 static struct {
@@ -133,7 +178,7 @@ static void highscore_remove_entry(Highscore *self, int idx) {
 }
 
 static void highscore_add_new_entry(Highscore *self, HighscoreEntry_s add) {
-    self->entries = rhc_realloc(self->entries, sizeof *self->entries * (self->entries_size + 1));
+    self->entries = s_renew(HighscoreEntry_s , self->entries, self->entries_size + 1);
 
     for (int i = 0; i < self->entries_size; i++) {
         if (self->entries[i].score < add.score) {
@@ -179,9 +224,34 @@ static void highscore_add_entry(Highscore *self, HighscoreEntry_s add) {
     }
 }
 
+static void highscorepack_add_entry(HighscorePack *self, HighscorePackEntry_s add) {
+    if (add.text[0] == '\0')
+        return;
+
+    int entries_size = self->entries_size + 1;
+    if(entries_size>HIGHSCORE_PACK_MAX_ENTRIES) {
+        entries_size = HIGHSCORE_PACK_MAX_ENTRIES;
+    }
+
+    HighscorePackEntry_s *entries = s_new(HighscorePackEntry_s, entries_size);
+
+    // first is the new in the fifo ring
+    entries[0] = add;
+
+    // copy rest (could be a memcpy, but I was to lazy to calc the bytes, so let the compiler optimize it...)
+    for(int i=1; i<entries_size; i++) {
+        entries[i] = self->entries[i-1];
+    }
+
+    // move
+    free(self->entries);
+    self->entries = entries;
+    self->entries_size = entries_size;
+}
+
 // topic and entry must be 0 terminated!
 // returns false if the entry was not valid
-static bool save_entry(Str_s topic, Str_s entry) {
+static bool save_entry(sStr_s topic, sStr_s entry) {
     HighscoreEntry_s add = highscore_entry_decode(entry);
     if (add.name[0] == '\0')
         return false;
@@ -192,10 +262,10 @@ static bool save_entry(Str_s topic, Str_s entry) {
 
     pthread_mutex_lock(&L.lock);
     {
-        String msg = file_read(file, true);
+        sString *msg = s_file_read(file, true);
 
-        Highscore highscore = highscore_decode(msg.str);
-        string_kill(&msg);
+        Highscore highscore = highscore_decode(s_string_get_str(msg));
+        s_string_kill(&msg);
 
         highscore_add_entry(&highscore, add);
 
@@ -205,16 +275,52 @@ static bool save_entry(Str_s topic, Str_s entry) {
 
         highscore_sort(&highscore);
 
-        String save = highscore_encode(highscore);
+        sString *save = highscore_encode(highscore);
         highscore_kill(&highscore);
 
-        if (!file_write(file, save.str, true)) {
+        if (!s_file_write(file, s_string_get_str(save), true)) {
             printf("failed to save topic file: %s\n", file);
         } else {
             puts("new highscore saved");
         }
 
-        string_kill(&save);
+        s_string_kill(&save);
+    }
+    pthread_mutex_unlock(&L.lock);
+
+    return true;
+}
+
+// topic and entry must be 0 terminated!
+// returns false if the entry was not valid
+static bool save_pack_entry(sStr_s topic, sStr_s entry) {
+    HighscorePackEntry_s add = highscorepack_entry_decode(entry);
+    if (add.text[0] == '\0')
+        return false;
+
+    make_dirs(topic.data);
+    char file[256];
+    snprintf(file, 256, "topics/%s.txt", topic.data);
+
+    pthread_mutex_lock(&L.lock);
+    {
+        sString *msg = s_file_read(file, true);
+
+        HighscorePack highscore = highscorepack_decode(s_string_get_str(msg));
+        s_string_kill(&msg);
+
+        highscorepack_add_entry(&highscore, add);
+
+        sString *save = highscorepack_encode(highscore);
+        highscorepack_kill(&highscore);
+
+        if (!s_file_write(file, s_string_get_str(save), true)) {
+            printf("failed to save topic file: %s\n", file);
+        } else {
+            puts("new highscore saved");
+        }
+
+        s_string_kill(&save);
     }
     pthread_mutex_unlock(&L.lock);
 
@@ -226,20 +332,20 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
     char file[256];
     snprintf(file, 256, "topics/%s.txt", topic);
 
-    String msg;
+    sString *msg;
 
     pthread_mutex_lock(&L.lock);
     {
-        msg = file_read(file, true);
+        msg = s_file_read(file, true);
     }
     pthread_mutex_unlock(&L.lock);
 
-    if (!string_valid(msg)) {
+    if (!s_string_valid(msg)) {
         printf("failed to read topic file: %s\n", topic);
         return MHD_NO;
     }
 
-    struct MHD_Response *response = MHD_create_response_from_buffer(msg.size, msg.data, MHD_RESPMEM_MUST_COPY);
+    struct MHD_Response *response = MHD_create_response_from_buffer(msg->size, msg->data, MHD_RESPMEM_MUST_COPY);
     MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain");
     MHD_add_response_header(response, MHD_HTTP_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
@@ -247,20 +353,22 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
     if (!ret)
         printf("http_send_highscore failed to queue response");
     MHD_destroy_response(response);
-    string_kill(&msg);
+    s_string_kill(&msg);
     return ret;
 }
 
-static int http_request(void *cls,
+static enum MHD_Result http_request(void *cls,
                         struct MHD_Connection *connection,
                         const char *url,
                         const char *method,
                         const char *version,
                         const char *upload_data, size_t *upload_data_size, void **ptr) {
     printf("http_request: %s, method: %s\n", url, method);
-    Str_s topic = str_eat_str(strc(url), strc("/api/"));
+    sStr_s topic = s_str_eat_str(s_strc(url), s_strc("/api/"));
 
-    if (str_empty(topic) || str_count(topic, '.') > 0) {
+    bool is_pack = s_str_begins_with(topic, s_strc("pack/"));
+
+    if (s_str_empty(topic) || s_str_count(topic, '.') > 0) {
         puts("http_request stopped, topic invalid");
         return MHD_NO;
     }
@@ -271,6 +379,7 @@ static int http_request(void *cls,
     }
 
     if (strcmp(method, "GET") == 0) {
+        // in both cases (Highscore and HighscorePack), just the file is sent back
         return http_send_highscore(connection, topic.data);
     }
 
@@ -290,9 +399,15 @@ static int http_request(void *cls,
 
         if (upload_data) {
             puts("http_request POST got data");
-            String entry = string_new_clone((Str_s) {(char *) upload_data, *upload_data_size});
-            bool ok = save_entry(topic, entry.str);
-            string_kill(&entry);
+            sString *entry = s_string_new_clone((sStr_s) {(char *) upload_data, *upload_data_size});
+            bool ok;
+
+            if(is_pack) {
+                ok = save_pack_entry(topic, s_string_get_str(entry));
+            } else {
+                ok = save_entry(topic, s_string_get_str(entry));
+            }
+            s_string_kill(&entry);
             if (!ok)
                 return MHD_NO;
 
@@ -303,6 +418,8 @@ static int http_request(void *cls,
         }
 
         puts("http_request POST end");
+
+        // in both cases (Highscore and HighscorePack), just the file is sent back
         return http_send_highscore(connection, topic.data);
     }
 
