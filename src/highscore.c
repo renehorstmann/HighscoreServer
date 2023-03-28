@@ -213,7 +213,7 @@ HighscorePack highscorepack_decode(sStr_s msg) {
 sString *highscorepack_encode(HighscorePack self) {
     sString *s = s_string_new(1024);
     for (int i = 0; i < self.entries_size; i++) {
-        char entry_buffer[HIGHSCORE_MAX_ENTRY_LENGTH];
+        char entry_buffer[HIGHSCORE_PACK_MAX_ENTRY_LENGTH];
         highscorepack_entry_encode(self.entries[i], entry_buffer);
         s_string_append(s, s_strc(entry_buffer));
         s_string_push(s, '\n');

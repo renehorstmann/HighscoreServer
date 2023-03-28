@@ -19,7 +19,7 @@
 #define SERVER_PORT 10000
 
 
-#define DEBUG_MODE
+//#define DEBUG_MODE
 
 /**
  * Highscores: (all topics that does NOT start with /pack/ )
@@ -97,7 +97,7 @@ static struct {
 
 static void make_dirs(const char *topic) {
 #ifdef DEBUG_MODE
-    puts("MAKE_DIRS not performed, in DEBUG_MODE");
+    s_log("MAKE_DIRS not performed, in DEBUG_MODE");
 #else
     char file[256];
     snprintf(file, 256, "topics/%s", topic);
@@ -166,7 +166,7 @@ static int highscore_sort_compare(const void *a, const void *b) {
 static void highscore_sort(Highscore *self) {
     if(!check_sorted(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare)) {
         sbsort(self->entries, self->entries_size, sizeof *self->entries, highscore_sort_compare);
-        puts("highscore sorted...?!?");
+        s_log("highscore sorted...?!?");
     }
 }
 
@@ -279,9 +279,9 @@ static bool save_entry(sStr_s topic, sStr_s entry) {
         highscore_kill(&highscore);
 
         if (!s_file_write(file, s_string_get_str(save), true)) {
-            printf("failed to save topic file: %s\n", file);
+            s_log("failed to save topic file: %s", file);
         } else {
-            puts("new highscore saved");
+            s_log("new highscore saved");
         }
 
         s_string_kill(&save);
@@ -315,9 +315,9 @@ static bool save_pack_entry(sStr_s topic, sStr_s entry) {
         highscorepack_kill(&highscore);
 
         if (!s_file_write(file, s_string_get_str(save), true)) {
-            printf("failed to save topic file: %s\n", file);
+            s_log("failed to save topic file: %s", file);
         } else {
-            puts("new highscore saved");
+            s_log("new highscore saved");
         }
 
         s_string_kill(&save);
@@ -328,7 +328,7 @@ static bool save_pack_entry(sStr_s topic, sStr_s entry) {
 }
 
 static int http_send_highscore(struct MHD_Connection *connection, const char *topic) {
-    puts("http_send_highscore");
+    s_log("http_send_highscore");
     char file[256];
     snprintf(file, 256, "topics/%s.txt", topic);
 
@@ -341,7 +341,7 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
     pthread_mutex_unlock(&L.lock);
 
     if (!s_string_valid(msg)) {
-        printf("failed to read topic file: %s\n", topic);
+        s_log("failed to read topic file: %s", topic);
         return MHD_NO;
     }
 
@@ -351,30 +351,37 @@ static int http_send_highscore(struct MHD_Connection *connection, const char *to
 
     int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
     if (!ret)
-        printf("http_send_highscore failed to queue response");
+        s_log("http_send_highscore failed to queue response");
     MHD_destroy_response(response);
     s_string_kill(&msg);
     return ret;
 }
 
-static enum MHD_Result http_request(void *cls,
+
+// the ubuntu server is ok with int, but wsl needs HMD_RESULT?
+#ifdef DEBUG_MODE
+static enum MHD_Result
+#else
+static int
+#endif
+        http_request(void *cls,
                         struct MHD_Connection *connection,
                         const char *url,
                         const char *method,
                         const char *version,
                         const char *upload_data, size_t *upload_data_size, void **ptr) {
-    printf("http_request: %s, method: %s\n", url, method);
+    s_log("http_request: %s, method: %s", url, method);
     sStr_s topic = s_str_eat_str(s_strc(url), s_strc("/api/"));
 
     bool is_pack = s_str_begins_with(topic, s_strc("pack/"));
 
     if (s_str_empty(topic) || s_str_count(topic, '.') > 0) {
-        puts("http_request stopped, topic invalid");
+        s_log("http_request stopped, topic invalid");
         return MHD_NO;
     }
 
     if (topic.size >= HIGHSCORE_TOPIC_MAX_LENGTH) {
-        puts("http_request stopped, topic to large");
+        s_log("http_request stopped, topic to large");
         return MHD_NO;
     }
 
@@ -386,9 +393,9 @@ static enum MHD_Result http_request(void *cls,
     if (strcmp(method, "POST") == 0) {
         if (!*ptr) {
             *ptr = (void *) 1;
-            puts("http_request POST start");
+            s_log("http_request POST start");
             if (*upload_data_size > 0) {
-                puts("http_request POST start failed, got data?");
+                s_log("http_request POST start failed, got data?");
                 return MHD_NO;
             }
             // here could be checked for Content-Type == plain/text
@@ -398,7 +405,7 @@ static enum MHD_Result http_request(void *cls,
         }
 
         if (upload_data) {
-            puts("http_request POST got data");
+            s_log("http_request POST got data");
             sString *entry = s_string_new_clone((sStr_s) {(char *) upload_data, *upload_data_size});
             bool ok;
 
@@ -417,36 +424,53 @@ static enum MHD_Result http_request(void *cls,
             return MHD_YES;
         }
 
-        puts("http_request POST end");
+        s_log("http_request POST end");
 
         // in both cases (Highscore and HighscorePack), just the file is sent back
         return http_send_highscore(connection, topic.data);
     }
 
     // unexpected method
-    puts("unexpected method");
+    s_log("unexpected method");
     return MHD_NO;
 }
 
 int main(int argc, char **argv) {
-    puts("Server start");
+    s_log("Server start");
     struct MHD_Daemon *d = MHD_start_daemon(
             0 | MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_THREAD_PER_CONNECTION,
             SERVER_PORT,
             NULL, NULL, &http_request, NULL,
             MHD_OPTION_END);
     if (!d) {
-        puts("failed to start the server");
+        s_log("failed to start the server");
         exit(EXIT_FAILURE);
     }
 
 #ifdef DEBUG_MODE
+
+    {
+        HighscoreEntry_s data;
+        data.score = 12345;
+        snprintf(data.name, sizeof data.name, "Hello World");
+        sString *example_entry = highscore_entry_to_string(data);
+        s_log("example score: <%s>", example_entry->data);
+        s_string_kill(&example_entry);
+    }
+    {
+        HighscorePackEntry_s data;
+        snprintf(data.text, sizeof data.text, "Hello World");
+        sString *example_entry = highscorepack_entry_to_string(data);
+        s_log("example pack: <%s>", example_entry->data);
+        s_string_kill(&example_entry);
+    }
+
     // wait for key
     getchar();
 #else
     // wait for ever
     system("tail -f /dev/null");
 #endif
-    puts("Server closed");
+    s_log("Server closed");
     return 0;
 }
